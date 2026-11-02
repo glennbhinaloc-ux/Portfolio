@@ -86,48 +86,45 @@ a { color: var(--accent); }
 .section-head { margin-bottom: 2.5rem; }
 .section-head p:not(.eyebrow) { max-width: 60ch; }
 
-/* 3. BACKGROUND (glow blobs + animated particle canvas) */
+/* 3. BACKGROUND (canvas host, always behind content) */
 .bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
-.bg canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.blob {
-  position: absolute;
-  width: 55vmax;
-  height: 55vmax;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--glow), transparent 65%);
-  filter: blur(40px);
-  animation: drift 26s ease-in-out infinite alternate;
-}
-.blob.b1 { top: -20vmax; left: -15vmax; }
-.blob.b2 { bottom: -25vmax; right: -20vmax; animation-duration: 32s; animation-delay: -8s; }
-@keyframes drift {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(6vw, 4vh, 0); }
-}
+.bg canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
-/* 4. CUSTOM CURSOR */
-.cursor-dot, .cursor-ring {
+/* 4. CURSOR FOLLOWER: trail canvas plus a head that follows the arrow */
+.trail-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9998;
+}
+.cursor-head {
   position: fixed;
   top: 0;
   left: 0;
   translate: -50% -50%;
-  border-radius: 50%;
   pointer-events: none;
   z-index: 9999;
-  opacity: 0;
+  font-size: 26px;
+  line-height: 1;
+  filter: drop-shadow(0 0 8px var(--glow));
   will-change: transform;
 }
-.cursor-dot { width: 8px; height: 8px; background: var(--accent); transition: opacity 0.3s, background 0.3s; }
-.cursor-dot.hover { opacity: 0 !important; }
-.cursor-ring {
-  width: 34px;
-  height: 34px;
-  border: 1.5px solid var(--accent);
-  transition: width 0.35s var(--ease), height 0.35s var(--ease), background 0.35s, opacity 0.3s;
+.cursor-head.orb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 20px 6px var(--glow);
 }
-.cursor-ring.hover { width: 60px; height: 60px; background: var(--glow); }
-html.has-cursor, html.has-cursor * { cursor: none !important; }
-html.has-cursor .cursor-dot, html.has-cursor .cursor-ring { opacity: 1; }
+.cursor-head.ring {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 16px var(--glow);
+}
 
 /* 5. NAVBAR (always visible) */
 .site-header {
@@ -446,21 +443,14 @@ footer { border-top: 1px solid var(--border); padding: 1.5rem 0; font-size: 0.9r
   html { scroll-behavior: auto; }
   .reveal { opacity: 1; translate: none; }
   .avatar-wrap { transform: none; }
-  .cursor-dot, .cursor-ring { display: none; }
+  .trail-canvas, .cursor-head { display: none; }
 }
 </style>
 </head>
 
 <body>
 
-<div class="bg" aria-hidden="true">
-  <canvas id="bg-canvas"></canvas>
-  <div class="blob b1"></div>
-  <div class="blob b2"></div>
-</div>
-
-<div class="cursor-dot" aria-hidden="true"></div>
-<div class="cursor-ring" aria-hidden="true"></div>
+<div class="bg" id="bg" aria-hidden="true"></div>
 
 <header class="site-header">
   <nav class="nav" aria-label="Main navigation">
@@ -615,8 +605,10 @@ footer { border-top: 1px solid var(--border); padding: 1.5rem 0; font-size: 0.9r
     ],
 
     education: [
-      { title: "Bachelor's Degree in Your Course", place: "Your University", year: "2022 – 2026" },
-      { title: "Senior High School", place: "Your School", year: "2020 – 2022" }
+      { title: "Current Taking My Bachelor Degree as Computer Science", place: "BOHOL ISLAND STATE UNIVERSITY", year: "2024 – 2028" },
+      { title: "Senior High School", place: "COGTONG NATIONAL HIGH SCHOOL", year: "2021 – 2023" },
+      { title: "Junior High School", place: "BOHOL ISLAND STATE UNIVERSITY - LABORATORY HIGHSCHOOL", year: "2017 – 2021" },
+      { title: "Elemetary School", place: "COGTONG ELEMENTARY SCHOOL", year: "2011 – 2017" }
     ],
 
     interests: ["Open-source", "Photography", "Music", "Travel", "Learning new tech", "Sketching"],
@@ -655,10 +647,8 @@ footer { border-top: 1px solid var(--border); padding: 1.5rem 0; font-size: 0.9r
     ],
 
     achievements: [
-      { icon: "🏆", title: "Placeholder Award Title", issuer: "Issuing Organization", year: "2026" },
-      { icon: "🎓", title: "Dean's Lister", issuer: "Your University", year: "2025" },
-      { icon: "📜", title: "Certificate in Web Development", issuer: "Online Platform", year: "2024" },
-      { icon: "🚀", title: "First Public Release", issuer: "Personal Project", year: "2024" }
+      { icon: "🎓", title: "Dean's Lister", issuer: "Bohol Island State University", year: "2025" },,
+      { icon: "🚀", title: "Talentrix", issuer: "Personal Project", year: "2024" }
     ],
 
     email: "glennhinaloc@gmail.com",
@@ -680,6 +670,14 @@ footer { border-top: 1px solid var(--border); padding: 1.5rem 0; font-size: 0.9r
 
   const VIEWS = ["home", "about", "writings", "achievements", "contact"];
   const LABELS = { home: "Home", about: "About", writings: "Writings", achievements: "Achievements", contact: "Contact" };
+
+  // Small helpers used by the background and cursor systems
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  const mix = (c1, c2, t) => [0, 1, 2].map((i) => c1[i] + (c2[i] - c1[i]) * t);
+  const countFor = (k = 1) =>
+    Math.round(Math.min(90, Math.max(25, (innerWidth * innerHeight / 20000) * k)));
 
   /* 3. RENDER CONTENT FROM CONFIG */
   function renderContent() {
@@ -843,82 +841,727 @@ footer { border-top: 1px solid var(--border); padding: 1.5rem 0; font-size: 0.9r
   window.addEventListener("resize", () => movePill(btnFor(currentView)));
   window.addEventListener("hashchange", () => goTo(viewFromHash(), false));
 
-  /* 5b. ANIMATED BACKGROUND: drifting, connecting particles */
-  function initBackground() {
-    const cv = $("#bg-canvas");
-    const ctx = cv.getContext("2d");
-    let w, h, pts = [], color = [45, 212, 191], frame = 0, raf = 0;
-    const mouse = { x: -9999, y: -9999 };
+  /* 5b. ANIMATED BACKGROUND SYSTEM
+     9 variants. One is picked at random on each page load, and it is never
+     the same as the previous visit. Add ?bg=0 to ?bg=8 to the URL to force one
+     (useful for testing). Every variant runs on a single canvas with one
+     requestAnimationFrame loop, and it is fully cleaned up when swapped out. */
 
-    function readColor() {
-      const c = getComputedStyle(root).getPropertyValue("--accent").trim();
-      const m = /^#([0-9a-f]{6})$/i.exec(c);
-      if (m) { const n = parseInt(m[1], 16); color = [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
-    }
+  const BG_LAST_KEY = "bgLastVariant";
+  const bgHost = $("#bg");
+  const bgThemeListeners = new Set();
+  const ACCENT_DARK = [167, 139, 250];   // violet accent for dark mode
+  const ACCENT_LIGHT = [124, 58, 237];   // deeper violet for light mode
 
-    function resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      w = window.innerWidth; h = window.innerHeight;
-      cv.width = w * dpr; cv.height = h * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const count = Math.round(Math.min(90, Math.max(25, (w * h) / 20000)));
-      pts = Array.from({ length: count }, () => ({
-        x: Math.random() * w, y: Math.random() * h,
-        vx: (Math.random() - 0.5) * 0.55, vy: (Math.random() - 0.5) * 0.55,
-        r: Math.random() * 1.6 + 0.8
-      }));
-    }
+  function hexToRgb(hex) {
+    const m = /^#([0-9a-f]{6})$/i.exec((hex || "").trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
 
-    function draw() {
-      if (++frame % 40 === 0) readColor();
-      ctx.clearRect(0, 0, w, h);
-      const [r, g, b] = color;
-      const LINK = 130;
+  // Reads the current theme colors so variants can follow the theme toggle
+  function readPalette() {
+    const dark = root.dataset.theme !== "light";
+    const a = hexToRgb(getComputedStyle(root).getPropertyValue("--accent")) || [45, 212, 191];
+    return { a, b: dark ? ACCENT_DARK : ACCENT_LIGHT, dark };
+  }
 
-      for (const p of pts) {
-        if (!reduced) {
-          const dx = p.x - mouse.x, dy = p.y - mouse.y, d = Math.hypot(dx, dy);
-          if (d < 140 && d > 0) { p.x += (dx / d) * 0.8; p.y += (dy / d) * 0.8; }
-          p.x += p.vx; p.y += p.vy;
-          if (p.x < -10) p.x = w + 10; else if (p.x > w + 10) p.x = -10;
-          if (p.y < -10) p.y = h + 10; else if (p.y > h + 10) p.y = -10;
-        }
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${r},${g},${b},0.55)`;
-        ctx.fill();
-      }
+  /* ---------- THE 9 VARIANTS ----------
+     Each variant: { name, init(env) } and init returns
+     { frame(dt, t), resize?(), click?(x, y) }.
+     env gives: ctx, w, h, pal (theme palette), mouse (x, y raw; sx, sy smoothed; active). */
+  const BG_VARIANTS = [
 
-      for (let i = 0; i < pts.length; i++) {
-        for (let j = i + 1; j < pts.length; j++) {
-          const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
-          if (d < LINK) {
-            ctx.strokeStyle = `rgba(${r},${g},${b},${0.2 * (1 - d / LINK)})`;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(pts[i].x, pts[i].y);
-            ctx.lineTo(pts[j].x, pts[j].y);
-            ctx.stroke();
+    /* 0. Aurora Ribbons: glowing waves that sweep across the screen */
+    {
+      name: "Aurora Ribbons",
+      init(env) {
+        const ribbons = Array.from({ length: 5 }, (_, i) => ({
+          i,
+          y: 0.18 + i * 0.12,
+          amp: rnd(40, 110),
+          f1: rnd(0.002, 0.005),
+          f2: rnd(0.006, 0.012),
+          s1: rnd(0.01, 0.02),
+          s2: rnd(0.008, 0.016),
+          p: rnd(0, 6.28),
+          th: rnd(60, 120)
+        }));
+        return {
+          frame(dt, t) {
+            const { ctx, w, h, pal, mouse } = env;
+            ctx.clearRect(0, 0, w, h);
+            const lift = (mouse.sy - h / 2) * 0.12;   // ribbons drift toward the pointer
+            ribbons.forEach((r) => {
+              const c = r.i % 2 ? pal.b : pal.a;
+              const yAt = (x) =>
+                h * r.y + lift * (r.i + 1) / 5 +
+                Math.sin(x * r.f1 + t * r.s1 + r.p) * r.amp +
+                Math.sin(x * r.f2 - t * r.s2) * r.amp * 0.35;
+              ctx.beginPath();
+              for (let x = 0; x <= w + 14; x += 14) ctx.lineTo(x, yAt(x));
+              for (let x = w + 14; x >= 0; x -= 14) ctx.lineTo(x, yAt(x) + r.th);
+              ctx.closePath();
+              const g = ctx.createLinearGradient(0, 0, w, 0);
+              g.addColorStop(0, rgba(c, 0));
+              g.addColorStop(0.5, rgba(c, pal.dark ? 0.32 : 0.22));
+              g.addColorStop(1, rgba(pal.b, 0));
+              ctx.fillStyle = g;
+              ctx.fill();
+            });
           }
-        }
+        };
       }
-      if (!reduced) raf = requestAnimationFrame(draw);
+    },
+
+    /* 1. Warp Speed: stars streak outward, and the vanishing point follows the pointer */
+    {
+      name: "Warp Speed",
+      init(env) {
+        let stars = [];
+        const reset = (s) => {
+          s.x = rnd(-1, 1) * env.w;
+          s.y = rnd(-1, 1) * env.h;
+          s.z = 1000;
+          s.alt = Math.random() < 0.5;
+          return s;
+        };
+        const seed = () => {
+          stars = [];
+          const n = countFor(2.2);
+          for (let i = 0; i < n; i++) {
+            const s = reset({});
+            s.z = rnd(2, 1000);          // spread stars out at start
+            stars.push(s);
+          }
+        };
+        seed();
+        return {
+          resize: seed,
+          frame(dt) {
+            const { ctx, w, h, pal, mouse } = env;
+            ctx.clearRect(0, 0, w, h);
+            const cx = mouse.sx, cy = mouse.sy, k = Math.max(w, h) * 0.5;
+            for (const s of stars) {
+              s.z -= 9 * dt;
+              if (s.z < 2) { reset(s); continue; }
+              const sx = cx + (s.x / s.z) * k, sy = cy + (s.y / s.z) * k;
+              const tz = s.z + 14;           // trail length
+              const tx = cx + (s.x / tz) * k, ty = cy + (s.y / tz) * k;
+              const depth = 1 - s.z / 1000;  // closer stars are brighter and thicker
+              ctx.strokeStyle = rgba(s.alt ? pal.b : pal.a, 0.25 + depth * 0.7);
+              ctx.lineWidth = 0.6 + depth * 2.2;
+              ctx.beginPath();
+              ctx.moveTo(tx, ty);
+              ctx.lineTo(sx, sy);
+              ctx.stroke();
+            }
+          }
+        };
+      }
+    },
+
+    /* 2. Magnetic Swarm: glowing dots chase the pointer and scatter on click */
+    {
+      name: "Magnetic Swarm",
+      init(env) {
+        let dots = [];
+        const make = () => {
+          dots = [];
+          const n = countFor(1.1);
+          for (let i = 0; i < n; i++) {
+            dots.push({
+              x: rnd(0, env.w), y: rnd(0, env.h),
+              vx: 0, vy: 0,
+              s: rnd(1.5, 3.5),
+              alt: Math.random() < 0.4
+            });
+          }
+        };
+        make();
+        return {
+          resize: make,
+          click(x, y) {
+            // Clicking scatters nearby dots outward
+            dots.forEach((d) => {
+              const dx = d.x - x, dy = d.y - y, dist = Math.hypot(dx, dy) || 1;
+              if (dist < 300) { d.vx += (dx / dist) * 6; d.vy += (dy / dist) * 6; }
+            });
+          },
+          frame(dt) {
+            const { ctx, w, h, pal, mouse } = env;
+            ctx.clearRect(0, 0, w, h);
+            for (const d of dots) {
+              const dx = mouse.sx - d.x, dy = mouse.sy - d.y, dist = Math.hypot(dx, dy) || 1;
+              // Pull toward pointer from far away, orbit when close
+              const f = dist > 120 ? 0.25 : -0.12;
+              d.vx += (dx / dist) * f * dt + (Math.random() - 0.5) * 0.3 * dt;
+              d.vy += (dy / dist) * f * dt + (Math.random() - 0.5) * 0.3 * dt;
+              d.vx *= Math.pow(0.97, dt);
+              d.vy *= Math.pow(0.97, dt);
+              const sp = Math.hypot(d.vx, d.vy);
+              if (sp > 8) { d.vx = (d.vx / sp) * 8; d.vy = (d.vy / sp) * 8; }
+              d.x += d.vx * dt;
+              d.y += d.vy * dt;
+              if (d.x < 0 || d.x > w) d.vx *= -1;
+              if (d.y < 0 || d.y > h) d.vy *= -1;
+
+              const c = d.alt ? pal.b : pal.a;
+              // Short motion trail
+              ctx.strokeStyle = rgba(c, 0.35);
+              ctx.lineWidth = d.s * 0.6;
+              ctx.beginPath();
+              ctx.moveTo(d.x - d.vx * 3, d.y - d.vy * 3);
+              ctx.lineTo(d.x, d.y);
+              ctx.stroke();
+              // Glow and core
+              ctx.fillStyle = rgba(c, 0.15);
+              ctx.beginPath(); ctx.arc(d.x, d.y, d.s * 3, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = rgba(c, 0.85);
+              ctx.beginPath(); ctx.arc(d.x, d.y, d.s, 0, Math.PI * 2); ctx.fill();
+            }
+          }
+        };
+      }
+    },
+
+    /* 3. Comet Shower: comets shoot across the screen and bend toward the pointer */
+    {
+      name: "Comet Shower",
+      init(env) {
+        const comets = [];
+        let timer = 0;
+        const spawn = (x, y, ang, sp) => comets.push({
+          x, y,
+          vx: Math.cos(ang) * sp,
+          vy: Math.sin(ang) * sp,
+          len: rnd(120, 260),
+          alt: Math.random() < 0.4
+        });
+        const randomComet = () =>
+          spawn(rnd(-100, env.w), rnd(-200, env.h * 0.3), rnd(0.5, 0.9), rnd(7, 13));
+        return {
+          click(x, y) {
+            // Clicking launches a small burst of comets from the cursor
+            for (let i = 0; i < 3; i++) spawn(x, y, rnd(0, Math.PI * 2), 8);
+          },
+          frame(dt) {
+            const { ctx, w, h, pal, mouse } = env;
+            ctx.clearRect(0, 0, w, h);
+            timer -= dt;
+            if (timer <= 0) { randomComet(); timer = rnd(25, 70); }
+
+            for (let i = comets.length - 1; i >= 0; i--) {
+              const c = comets[i];
+              // Gentle bend toward the pointer
+              c.vx += (mouse.sx - c.x) * 0.00003 * dt;
+              c.vy += (mouse.sy - c.y) * 0.00003 * dt;
+              c.x += c.vx * dt;
+              c.y += c.vy * dt;
+
+              const sp = Math.hypot(c.vx, c.vy) || 1;
+              const tx = c.x - (c.vx / sp) * c.len;
+              const ty = c.y - (c.vy / sp) * c.len;
+              const col = c.alt ? pal.b : pal.a;
+
+              const g = ctx.createLinearGradient(c.x, c.y, tx, ty);
+              g.addColorStop(0, rgba(col, 0.95));
+              g.addColorStop(1, rgba(col, 0));
+              ctx.strokeStyle = g;
+              ctx.lineWidth = 2.2;
+              ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(tx, ty); ctx.stroke();
+
+              // Bright head with a colored glow
+              ctx.fillStyle = rgba(col, 0.35);
+              ctx.beginPath(); ctx.arc(c.x, c.y, 7, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = "rgba(255,255,255,0.9)";
+              ctx.beginPath(); ctx.arc(c.x, c.y, 2.2, 0, Math.PI * 2); ctx.fill();
+
+              if (c.x < -300 || c.x > w + 300 || c.y > h + 300) comets.splice(i, 1);
+            }
+          }
+        };
+      }
+    },
+
+    /* 4. Floating Geometry: spinning shapes that bob, and bounce away from the pointer */
+    {
+      name: "Floating Geometry",
+      init(env) {
+        let shapes = [];
+        const make = () => {
+          shapes = [];
+          const n = Math.max(14, Math.round(countFor(0.6)));
+          for (let i = 0; i < n; i++) {
+            shapes.push({
+              x: rnd(0, env.w), y: rnd(0, env.h),
+              vx: rnd(-0.4, 0.4), vy: rnd(-0.4, 0.4),
+              r: rnd(18, 55),
+              rot: rnd(0, 6.28), vr: rnd(-0.015, 0.015),
+              type: pick(["circle", "tri", "square", "hex"]),
+              alt: Math.random() < 0.4
+            });
+          }
+        };
+        const polyPath = (ctx, r, sides, rot) => {
+          ctx.beginPath();
+          for (let i = 0; i < sides; i++) {
+            const a = rot + (i * 2 * Math.PI) / sides;
+            const px = Math.cos(a) * r, py = Math.sin(a) * r;
+            if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+          }
+          ctx.closePath();
+        };
+        make();
+        return {
+          resize: make,
+          click(x, y) {
+            // Clicking pushes shapes outward
+            shapes.forEach((s) => {
+              const dx = s.x - x, dy = s.y - y, d = Math.hypot(dx, dy) || 1;
+              if (d < 350) { s.vx += (dx / d) * 4; s.vy += (dy / d) * 4; }
+            });
+          },
+          frame(dt, t) {
+            const { ctx, w, h, pal, mouse } = env;
+            ctx.clearRect(0, 0, w, h);
+            for (const s of shapes) {
+              const dx = s.x - mouse.sx, dy = s.y - mouse.sy, d = Math.hypot(dx, dy) || 1;
+              if (d < 170) { s.vx += (dx / d) * 0.25 * dt; s.vy += (dy / d) * 0.25 * dt; }
+              s.vx *= Math.pow(0.985, dt);
+              s.vy *= Math.pow(0.985, dt);
+              s.x += s.vx * dt;
+              s.y += s.vy * dt + Math.sin(t * 0.02 + s.r) * 0.2 * dt;   // bobbing
+              s.rot += s.vr * dt;
+              if (s.x < -80) s.x = w + 80; else if (s.x > w + 80) s.x = -80;
+              if (s.y < -80) s.y = h + 80; else if (s.y > h + 80) s.y = -80;
+
+              const c = s.alt ? pal.b : pal.a;
+              ctx.save();
+              ctx.translate(s.x, s.y);
+              ctx.rotate(s.rot);
+              if (s.type === "circle") {
+                ctx.beginPath(); ctx.arc(0, 0, s.r, 0, Math.PI * 2);
+              } else if (s.type === "tri") {
+                polyPath(ctx, s.r, 3, 0);
+              } else if (s.type === "hex") {
+                polyPath(ctx, s.r, 6, 0);
+              } else {
+                polyPath(ctx, s.r * 0.85, 4, Math.PI / 4);
+              }
+              ctx.fillStyle = rgba(c, pal.dark ? 0.16 : 0.12);
+              ctx.fill();
+              ctx.strokeStyle = rgba(c, 0.55);
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+              ctx.restore();
+            }
+          }
+        };
+      }
+    },
+
+    /* 5. Ripple Grid: a dot grid where ripples expand from the pointer and random drops */
+    {
+      name: "Ripple Grid",
+      init(env) {
+        const GAP = 34;
+        let cols = 0, rows = 0, ripples = [], timer = 0, pointerTimer = 0;
+        const layout = () => {
+          cols = Math.ceil(env.w / GAP) + 1;
+          rows = Math.ceil(env.h / GAP) + 1;
+        };
+        layout();
+        const addRipple = (x, y, life = 1) => ripples.push({ x, y, r: 0, life });
+        return {
+          resize: layout,
+          click(x, y) { addRipple(x, y, 1.6); },
+          frame(dt) {
+            const { ctx, w, h, pal, mouse } = env;
+            ctx.clearRect(0, 0, w, h);
+
+            // Automatic random drops, plus small ripples while the pointer moves
+            timer -= dt;
+            if (timer <= 0) { addRipple(rnd(0, w), rnd(0, h)); timer = rnd(60, 120); }
+            if (mouse.active) {
+              pointerTimer -= dt;
+              if (pointerTimer <= 0) { addRipple(mouse.x, mouse.y, 0.5); pointerTimer = 18; }
+            }
+
+            for (const r of ripples) { r.r += 3.2 * dt; r.life *= Math.pow(0.985, dt); }
+            ripples = ripples.filter((r) => r.life > 0.02 && r.r < Math.max(w, h) * 1.2);
+
+            for (let i = 0; i < cols; i++) {
+              for (let j = 0; j < rows; j++) {
+                const x = i * GAP, y = j * GAP;
+                let e = 0;
+                for (const r of ripples) {
+                  const d = Math.abs(Math.hypot(x - r.x, y - r.y) - r.r);
+                  if (d < 40) e += r.life * (1 - d / 40);
+                }
+                const boost = Math.min(e, 1);
+                ctx.fillStyle = rgba(e > 0.35 ? pal.b : pal.a, 0.14 + boost * 0.8);
+                ctx.beginPath();
+                ctx.arc(x, y, 1.1 + boost * 3.2, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
+          }
+        };
+      }
+    },
+
+    /* 6. Bubble Rise: glossy bubbles float up and pop with sparkles when the pointer passes */
+    {
+      name: "Bubble Rise",
+      init(env) {
+        let bubbles = [];
+        let pops = [];
+        const spawnBubble = (b = {}) => {
+          b.x = rnd(0, env.w);
+          b.y = env.h + rnd(20, 200);
+          b.r = rnd(10, 42);
+          b.vy = rnd(0.6, 1.6);
+          b.wob = rnd(0.01, 0.03);
+          b.ph = rnd(0, 6.28);
+          b.alt = Math.random() < 0.4;
+          return b;
+        };
+        const make = () => {
+          bubbles = [];
+          const n = countFor(0.8);
+          for (let i = 0; i < n; i++) {
+            const b = spawnBubble();
+            b.y = rnd(0, env.h);
+            bubbles.push(b);
+          }
+        };
+        const burst = (x, y, alt) => {
+          const c = alt ? env.pal.b : env.pal.a;
+          for (let i = 0; i < 8; i++) {
+            const a = rnd(0, Math.PI * 2), s = rnd(1, 4);
+            pops.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, c });
+          }
+        };
+        make();
+        return {
+          resize: make,
+          click(x, y) { burst(x, y, Math.random() < 0.5); },
+          frame(dt, t) {
+            const { ctx, w, h, pal, mouse } = env;
+            ctx.clearRect(0, 0, w, h);
+
+            // Update sparkles from earlier pops
+            pops = pops.filter((p) => p.life > 0.02);
+            for (const p of pops) {
+              p.x += p.vx * dt;
+              p.y += p.vy * dt;
+              p.vy += 0.02 * dt;
+              p.life *= Math.pow(0.95, dt);
+              ctx.fillStyle = rgba(p.c, p.life);
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, 2.5 * p.life + 0.5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+
+            for (const b of bubbles) {
+              b.y -= b.vy * dt;
+              b.x += Math.sin(t * b.wob + b.ph) * 0.8 * dt;
+
+              // The pointer pops bubbles it passes over
+              if (mouse.active && Math.hypot(b.x - mouse.x, b.y - mouse.y) < b.r + 6) {
+                burst(b.x, b.y, b.alt);
+                spawnBubble(b);
+                continue;
+              }
+              if (b.y < -b.r * 2) spawnBubble(b);
+
+              const c = b.alt ? pal.b : pal.a;
+              const g = ctx.createRadialGradient(b.x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.1, b.x, b.y, b.r);
+              g.addColorStop(0, rgba(c, 0.02));
+              g.addColorStop(0.75, rgba(c, 0.12));
+              g.addColorStop(1, rgba(c, 0.45));
+              ctx.fillStyle = g;
+              ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+              ctx.strokeStyle = rgba(c, 0.5);
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              // Glossy highlight
+              ctx.fillStyle = "rgba(255,255,255,0.55)";
+              ctx.beginPath();
+              ctx.arc(b.x - b.r * 0.4, b.y - b.r * 0.4, b.r * 0.16, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        };
+      }
+    },
+
+    /* 7. Firefly Night: warm lights wander, cluster near the pointer, and flash in sync */
+    {
+      name: "Firefly Night",
+      init(env) {
+        const WARM = [255, 214, 122];
+        let flies = [];
+        let flash = 0;
+        let nextFlash = 300;
+        const make = () => {
+          flies = [];
+          const n = countFor(0.7);
+          for (let i = 0; i < n; i++) {
+            flies.push({
+              x: rnd(0, env.w), y: rnd(0, env.h),
+              vx: 0, vy: 0,
+              ph: rnd(0, 6.28),
+              sp: rnd(0.02, 0.06),
+              n: rnd(0, 1000),
+              r: rnd(1.6, 3.2),
+              warm: Math.random() < 0.6
+            });
+          }
+        };
+        make();
+        return {
+          resize: make,
+          click(x, y) {
+            // Clicking makes a synchronized flash and startles nearby fireflies
+            flash = 1;
+            flies.forEach((f) => {
+              const dx = f.x - x, dy = f.y - y, d = Math.hypot(dx, dy) || 1;
+              if (d < 250) { f.vx += (dx / d) * 2; f.vy += (dy / d) * 2; }
+            });
+          },
+          frame(dt, t) {
+            const { ctx, w, h, pal, mouse } = env;
+            ctx.clearRect(0, 0, w, h);
+
+            // Every few seconds, all fireflies flash together
+            nextFlash -= dt;
+            if (nextFlash <= 0) { flash = 1; nextFlash = rnd(400, 700); }
+            flash *= Math.pow(0.95, dt);
+
+            for (const f of flies) {
+              // Organic wandering plus a pull toward the pointer
+              f.vx += Math.cos(t * 0.015 + f.n) * 0.02 * dt;
+              f.vy += Math.sin(t * 0.017 + f.n) * 0.02 * dt;
+              const dx = mouse.sx - f.x, dy = mouse.sy - f.y, d = Math.hypot(dx, dy) || 1;
+              if (d < 380) { f.vx += (dx / d) * 0.02 * dt; f.vy += (dy / d) * 0.02 * dt; }
+              f.vx *= Math.pow(0.97, dt);
+              f.vy *= Math.pow(0.97, dt);
+              f.x += f.vx * dt;
+              f.y += f.vy * dt;
+              if (f.x < -20) f.x = w + 20; else if (f.x > w + 20) f.x = -20;
+              if (f.y < -20) f.y = h + 20; else if (f.y > h + 20) f.y = -20;
+
+              const blink = 0.5 + 0.5 * Math.sin(t * f.sp + f.ph);
+              const a = Math.min(1, 0.15 + blink * 0.7 + flash * 0.6);
+              const col = f.warm ? WARM : pal.b;
+              const glowR = f.r * 6;
+              const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, glowR);
+              g.addColorStop(0, rgba(col, a * 0.8));
+              g.addColorStop(1, rgba(col, 0));
+              ctx.fillStyle = g;
+              ctx.beginPath(); ctx.arc(f.x, f.y, glowR, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = rgba(col, Math.min(1, a + 0.2));
+              ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
+            }
+          }
+        };
+      }
+    },
+
+    /* 8. Liquid Gradient: morphing color blobs that blend, shift hue, and follow the pointer */
+    {
+      name: "Liquid Gradient",
+      init(env) {
+        const blobs = Array.from({ length: 4 }, (_, k) => ({
+          k,
+          ph: k * 1.6 + rnd(0, 1),
+          sp: rnd(0.004, 0.009),
+          rx: rnd(0.22, 0.38),
+          ry: rnd(0.2, 0.36),
+          size: rnd(0.4, 0.6)
+        }));
+        return {
+          frame(dt, t) {
+            const { ctx, w, h, pal, mouse } = env;
+            ctx.clearRect(0, 0, w, h);
+
+            // Two extra colors that slowly blend between the theme colors (hue drift)
+            const m = 0.5 + 0.5 * Math.sin(t * 0.004);
+            const cols = [pal.a, pal.b, mix(pal.a, pal.b, m), mix(pal.b, pal.a, 0.3 + 0.4 * m)];
+
+            const maxD = Math.max(w, h);
+            const px = mouse.sx / w - 0.5, py = mouse.sy / h - 0.5;
+
+            for (const bl of blobs) {
+              const dir = bl.k % 2 ? 1 : -1;
+              const x = w * 0.5 + Math.cos(t * bl.sp + bl.ph) * w * bl.rx + px * w * 0.25 * dir;
+              const y = h * 0.5 + Math.sin(t * bl.sp * 1.3 + bl.ph) * h * bl.ry + py * h * 0.25;
+              const r = maxD * bl.size * 0.6;
+              const c = cols[bl.k];
+              const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+              g.addColorStop(0, rgba(c, pal.dark ? 0.42 : 0.32));
+              g.addColorStop(1, rgba(c, 0));
+              ctx.fillStyle = g;
+              ctx.fillRect(0, 0, w, h);
+            }
+          }
+        };
+      }
+    }
+  ];
+
+  /* ---------- ENGINE: mounts one variant, runs its loop, and cleans it up ---------- */
+
+  // Picks a random variant that is not the same as the last one shown
+  function pickVariant() {
+    const n = BG_VARIANTS.length;
+    let last = -1;
+    try { last = parseInt(localStorage.getItem(BG_LAST_KEY), 10); } catch (e) { /* storage unavailable */ }
+    let i;
+    do { i = Math.floor(Math.random() * n); } while (n > 1 && i === last);
+    try { localStorage.setItem(BG_LAST_KEY, String(i)); } catch (e) { /* storage unavailable */ }
+    return i;
+  }
+
+  // Mounts one variant and returns a destroy() function that fully cleans it up
+  function mountBackground(index) {
+    const def = BG_VARIANTS[index];
+    const canvas = document.createElement("canvas");
+    bgHost.appendChild(canvas);
+    const ctx = canvas.getContext("2d");
+
+    const env = {
+      ctx,
+      canvas,
+      w: 0,
+      h: 0,
+      pal: readPalette(),
+      mouse: {
+        x: innerWidth / 2, y: innerHeight / 2,
+        sx: innerWidth / 2, sy: innerHeight / 2,
+        active: false
+      }
+    };
+
+    let inst = null;
+    let raf = 0, last = 0, t = 0, running = false;
+
+    // Keeps the canvas sharp on high-DPI screens (device pixel ratio capped at 2)
+    function setSize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      env.w = innerWidth;
+      env.h = innerHeight;
+      canvas.width = Math.round(env.w * dpr);
+      canvas.height = Math.round(env.h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
-    readColor();
-    resize();
-    draw();
-    if (reduced) { window.addEventListener("resize", () => { resize(); draw(); }); return; }
-
-    window.addEventListener("resize", resize);
-    if (fine) {
-      window.addEventListener("pointermove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; }, { passive: true });
-      window.addEventListener("pointerleave", () => { mouse.x = mouse.y = -9999; });
+    // With no active pointer (or on touch), the focus point wanders gently
+    function driveMouse(dt, tt) {
+      const m = env.mouse;
+      if (!m.active) {
+        m.x = env.w * (0.5 + 0.32 * Math.sin(tt * 0.0035));
+        m.y = env.h * (0.5 + 0.28 * Math.sin(tt * 0.0027 + 1.3));
+      }
+      const k = Math.min(1, 0.12 * dt);
+      m.sx += (m.x - m.sx) * k;
+      m.sy += (m.y - m.sy) * k;
     }
-    document.addEventListener("visibilitychange", () => {
+
+    // Reduced motion: settle the scene once and draw a still frame, no loop
+    function renderStill() {
+      for (let i = 0; i < 90; i++) inst.frame(1, i);
+    }
+
+    function step(now) {
+      if (!running) return;
+      const dt = Math.min(3, (now - last) / 16.667);
+      last = now;
+      t += dt;
+      driveMouse(dt, t);
+      inst.frame(dt, t);
+      raf = requestAnimationFrame(step);
+    }
+
+    function start() {
+      if (running || reduced) return;
+      running = true;
+      last = performance.now();
+      raf = requestAnimationFrame(step);
+    }
+
+    function stop() {
+      running = false;
       cancelAnimationFrame(raf);
-      if (!document.hidden) raf = requestAnimationFrame(draw);
-    });
+    }
+
+    function onResize() {
+      setSize();
+      if (inst && inst.resize) inst.resize();
+      if (reduced) renderStill();
+    }
+    function onMove(e) {
+      env.mouse.x = e.clientX;
+      env.mouse.y = e.clientY;
+      env.mouse.active = true;
+    }
+    function onDown(e) {
+      env.mouse.x = e.clientX;
+      env.mouse.y = e.clientY;
+      if (inst && inst.click) inst.click(e.clientX, e.clientY);
+    }
+    function onUp(e) {
+      if (e.pointerType === "touch") env.mouse.active = false;   // finger lifted
+    }
+    function onLeave() { env.mouse.active = false; }
+    function onTheme() {
+      env.pal = readPalette();
+      if (reduced) renderStill();
+    }
+    function onVisibility() {
+      if (document.hidden) stop(); else start();
+    }
+
+    const passive = { passive: true };
+    window.addEventListener("pointermove", onMove, passive);
+    window.addEventListener("pointerdown", onDown, passive);
+    window.addEventListener("pointerup", onUp, passive);
+    document.documentElement.addEventListener("mouseleave", onLeave);
+    window.addEventListener("resize", onResize);
+    document.addEventListener("visibilitychange", onVisibility);
+    bgThemeListeners.add(onTheme);
+
+    setSize();
+    inst = def.init(env);
+    if (reduced) renderStill(); else start();
+
+    // Full teardown so nothing keeps running after a variant is swapped out
+    return function destroy() {
+      stop();
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointerup", onUp);
+      document.documentElement.removeEventListener("mouseleave", onLeave);
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", onVisibility);
+      bgThemeListeners.delete(onTheme);
+      if (inst && inst.destroy) inst.destroy();
+      canvas.remove();
+    };
+  }
+
+  function initBackground() {
+    // Optional ?bg=N in the URL forces a specific variant (0 to 8)
+    const forced = parseInt(new URLSearchParams(location.search).get("bg"), 10);
+    const index = (forced >= 0 && forced < BG_VARIANTS.length) ? forced : pickVariant();
+    mountBackground(index);
+
+    // Re-read colors whenever the theme toggle changes data-theme
+    new MutationObserver(() => bgThemeListeners.forEach((fn) => fn()))
+      .observe(root, { attributes: true, attributeFilter: ["data-theme"] });
   }
 
   /* 6. REVEAL ON SCROLL */
@@ -988,35 +1631,466 @@ footer { border-top: 1px solid var(--border); padding: 1.5rem 0; font-size: 0.9r
     });
   }
 
-  /* 9. CUSTOM CURSOR (desktop only) */
-  function initCursor() {
-    if (!fine || reduced) return;
-    const dot = $(".cursor-dot");
-    const ring = $(".cursor-ring");
-    let mx = window.innerWidth / 2, my = window.innerHeight / 2;
-    let rx = mx, ry = my;
+  /* 9b. LOW-POLY 3D ANIMALS: flat-shaded triangles drawn on canvas, no libraries */
+  const LP_COLORS = {
+    orange: [240, 122, 44], white: [242, 242, 246], grey: [150, 153, 162],
+    dark: [70, 72, 82], black: [38, 40, 48], yellow: [250, 196, 40],
+    tan: [214, 176, 120], brown: [140, 96, 60], cream: [240, 226, 200], pink: [240, 160, 170]
+  };
+  const LP_KINDS = ["fox", "owl", "elephant", "penguin", "dog", "rabbit", "tiger"];
 
-    document.documentElement.classList.add("has-cursor");
+  // Builds one animal from simple parts: low-poly balls and boxes
+  function buildLowPoly(kind) {
+    const V = [], F = [];
+    const C = LP_COLORS;
 
-    document.addEventListener("pointermove", (e) => {
-      mx = e.clientX;
-      my = e.clientY;
-      dot.style.transform = `translate3d(${mx}px, ${my}px, 0)`;
-    }, { passive: true });
+    // Rounded low-poly ball: an octahedron subdivided once, then scaled
+    function ball(cx, cy, cz, sx, sy, sz, c) {
+      const base = V.length;
+      const pts = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+      const tris = [[0,2,4],[2,1,4],[1,3,4],[3,0,4],[2,0,5],[1,2,5],[3,1,5],[0,3,5]];
+      const cache = {};
+      const mid = (a, b) => {
+        const key = a < b ? a + "," + b : b + "," + a;
+        if (cache[key] !== undefined) return cache[key];
+        const m = [0, 1, 2].map((i) => (pts[a][i] + pts[b][i]) / 2);
+        const len = Math.hypot(m[0], m[1], m[2]);
+        pts.push(m.map((v) => v / len));
+        return (cache[key] = pts.length - 1);
+      };
+      const faces = [];
+      for (const [a, b, d] of tris) {
+        const ab = mid(a, b), bd = mid(b, d), da = mid(d, a);
+        faces.push([a, ab, da], [b, bd, ab], [d, da, bd], [ab, bd, da]);
+      }
+      pts.forEach((p) => V.push([cx + p[0] * sx, cy + p[1] * sy, cz + p[2] * sz]));
+      faces.forEach((f) => F.push({ i: f.map((k) => base + k), c }));
+    }
 
-    (function loop() {
-      rx += (mx - rx) * 0.18;
-      ry += (my - ry) * 0.18;
-      ring.style.transform = `translate3d(${rx}px, ${ry}px, 0)`;
-      requestAnimationFrame(loop);
-    })();
+    // Box: 8 corners and 12 triangles
+    function box(cx, cy, cz, sx, sy, sz, c) {
+      const base = V.length;
+      for (let i = 0; i < 8; i++) {
+        const x = i & 4 ? 1 : -1, y = i & 2 ? 1 : -1, z = i & 1 ? 1 : -1;
+        V.push([cx + x * sx, cy + y * sy, cz + z * sz]);
+      }
+      const quads = [[0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]];
+      for (const q of quads) {
+        const g = q.map((k) => base + k);
+        F.push({ i: [g[0], g[1], g[2]], c }, { i: [g[0], g[2], g[3]], c });
+      }
+    }
 
-    const INTERACTIVE = "a, button, input, textarea, .card, .tilt";
-    document.addEventListener("pointerover", (e) => {
-      const hot = !!e.target.closest(INTERACTIVE);
-      ring.classList.toggle("hover", hot);
-      dot.classList.toggle("hover", hot);
+    if (kind === "penguin") {
+      ball(0, 0, 0, 0.75, 1.0, 0.7, C.black);
+      ball(0, -0.05, 0.4, 0.5, 0.8, 0.3, C.white);
+      ball(0, 1.05, 0, 0.55, 0.55, 0.55, C.black);
+      box(0, 1.0, 0.55, 0.16, 0.12, 0.2, C.yellow);
+      box(-0.22, 1.15, 0.5, 0.09, 0.09, 0.05, C.white);
+      box(0.22, 1.15, 0.5, 0.09, 0.09, 0.05, C.white);
+      box(-0.22, 1.15, 0.56, 0.04, 0.04, 0.02, C.black);
+      box(0.22, 1.15, 0.56, 0.04, 0.04, 0.02, C.black);
+      box(-0.3, -1.05, 0.15, 0.2, 0.08, 0.3, C.yellow);
+      box(0.3, -1.05, 0.15, 0.2, 0.08, 0.3, C.yellow);
+    } else if (kind === "fox") {
+      ball(0, -0.1, 0, 0.75, 0.7, 0.65, C.orange);
+      ball(0, 0.65, 0.05, 0.6, 0.55, 0.55, C.orange);
+      ball(0, 0.45, 0.4, 0.38, 0.3, 0.3, C.white);
+      box(-0.32, 1.25, 0, 0.14, 0.28, 0.12, C.orange);
+      box(0.32, 1.25, 0, 0.14, 0.28, 0.12, C.orange);
+      box(0, 0.6, 0.62, 0.1, 0.1, 0.1, C.black);
+      box(-0.25, 0.8, 0.5, 0.08, 0.06, 0.04, C.black);
+      box(0.25, 0.8, 0.5, 0.08, 0.06, 0.04, C.black);
+      ball(0, -0.5, -0.65, 0.35, 0.3, 0.45, C.orange);
+      ball(0, -0.55, -1.05, 0.25, 0.22, 0.22, C.white);
+      box(-0.35, -0.85, 0.3, 0.2, 0.35, 0.2, C.dark);
+      box(0.35, -0.85, 0.3, 0.2, 0.35, 0.2, C.dark);
+    } else if (kind === "owl") {
+      ball(0, 0, 0, 0.9, 0.95, 0.8, C.white);
+      ball(0, 0.75, 0.15, 0.75, 0.6, 0.6, C.white);
+      box(-0.45, 1.3, 0.05, 0.14, 0.25, 0.1, C.white);
+      box(0.45, 1.3, 0.05, 0.14, 0.25, 0.1, C.white);
+      box(-0.3, 0.8, 0.7, 0.2, 0.2, 0.05, C.grey);
+      box(0.3, 0.8, 0.7, 0.2, 0.2, 0.05, C.grey);
+      box(-0.3, 0.8, 0.76, 0.1, 0.1, 0.03, C.black);
+      box(0.3, 0.8, 0.76, 0.1, 0.1, 0.03, C.black);
+      box(0, 0.55, 0.78, 0.08, 0.12, 0.08, C.yellow);
+      box(-0.3, -0.98, 0.3, 0.18, 0.08, 0.2, C.yellow);
+      box(0.3, -0.98, 0.3, 0.18, 0.08, 0.2, C.yellow);
+    } else if (kind === "dog") {
+      // Labrador-style dog
+      ball(0, 0, 0, 0.95, 0.6, 0.6, C.tan);
+      ball(0, 0.55, 0.75, 0.45, 0.42, 0.42, C.tan);
+      box(0, 0.45, 1.2, 0.2, 0.16, 0.2, C.tan);
+      box(0, 0.48, 1.42, 0.07, 0.07, 0.04, C.black);
+      box(-0.3, 0.85, 0.7, 0.12, 0.25, 0.1, C.brown);
+      box(0.3, 0.85, 0.7, 0.12, 0.25, 0.1, C.brown);
+      box(-0.5, -0.8, 0.4, 0.14, 0.4, 0.14, C.tan);
+      box(0.5, -0.8, 0.4, 0.14, 0.4, 0.14, C.tan);
+      box(-0.5, -0.8, -0.4, 0.14, 0.4, 0.14, C.tan);
+      box(0.5, -0.8, -0.4, 0.14, 0.4, 0.14, C.tan);
+      box(0, 0.3, -1.05, 0.08, 0.3, 0.08, C.tan);
+    } else if (kind === "rabbit") {
+      // Cute rabbit with long ears
+      ball(0, -0.2, 0, 0.6, 0.6, 0.7, C.brown);
+      ball(0, -0.25, 0.2, 0.4, 0.4, 0.4, C.cream);
+      ball(0, 0.5, 0.55, 0.4, 0.38, 0.38, C.brown);
+      box(-0.15, 1.15, 0.5, 0.08, 0.4, 0.05, C.brown);
+      box(0.15, 1.15, 0.5, 0.08, 0.4, 0.05, C.brown);
+      box(-0.15, 1.15, 0.52, 0.04, 0.32, 0.02, C.pink);
+      box(0.15, 1.15, 0.52, 0.04, 0.32, 0.02, C.pink);
+      box(-0.18, 0.6, 0.9, 0.05, 0.05, 0.03, C.black);
+      box(0.18, 0.6, 0.9, 0.05, 0.05, 0.03, C.black);
+      box(0, 0.45, 0.95, 0.04, 0.04, 0.03, C.pink);
+      box(-0.2, -0.5, 0.5, 0.1, 0.35, 0.1, C.brown);
+      box(0.2, -0.5, 0.5, 0.1, 0.35, 0.1, C.brown);
+      box(-0.3, -0.9, -0.2, 0.2, 0.1, 0.35, C.brown);
+      box(0.3, -0.9, -0.2, 0.2, 0.1, 0.35, C.brown);
+      ball(0, -0.1, -0.75, 0.15, 0.15, 0.15, C.cream);
+    } else if (kind === "tiger") {
+      // Tiger with orange body and black stripes
+      ball(0, 0, 0, 0.9, 0.6, 0.7, C.orange);
+      ball(0, -0.1, 0.35, 0.6, 0.5, 0.4, C.cream);
+      ball(0, 0.4, 0.85, 0.5, 0.45, 0.42, C.orange);
+      box(0, 0.25, 1.2, 0.22, 0.18, 0.18, C.cream);
+      box(0, 0.3, 1.4, 0.07, 0.06, 0.04, C.black);
+      box(-0.3, 0.9, 0.75, 0.12, 0.14, 0.08, C.orange);
+      box(0.3, 0.9, 0.75, 0.12, 0.14, 0.08, C.orange);
+      box(0, 0.85, 0.75, 0.06, 0.08, 0.2, C.black);
+      for (const z of [-0.5, 0, 0.5]) {
+        box(-0.9, 0.1, z, 0.06, 0.45, 0.08, C.black);
+        box(0.9, 0.1, z, 0.06, 0.45, 0.08, C.black);
+      }
+      box(-0.5, -0.85, 0.4, 0.16, 0.4, 0.16, C.orange);
+      box(0.5, -0.85, 0.4, 0.16, 0.4, 0.16, C.orange);
+      box(-0.5, -0.85, -0.4, 0.16, 0.4, 0.16, C.orange);
+      box(0.5, -0.85, -0.4, 0.16, 0.4, 0.16, C.orange);
+      box(0, 0.1, -1.0, 0.1, 0.1, 0.45, C.orange);
+      box(0, 0.1, -1.45, 0.11, 0.11, 0.1, C.black);
+    } else {
+      // elephant
+      ball(0, 0, 0, 0.95, 0.75, 0.75, C.grey);
+      ball(0, 0.55, 0.3, 0.6, 0.6, 0.55, C.grey);
+      box(-0.75, 0.55, 0.15, 0.12, 0.5, 0.4, C.dark);
+      box(0.75, 0.55, 0.15, 0.12, 0.5, 0.4, C.dark);
+      box(0, 0.25, 0.9, 0.15, 0.4, 0.15, C.grey);
+      box(0, -0.25, 1.0, 0.14, 0.2, 0.14, C.grey);
+      box(-0.22, 0.2, 0.9, 0.05, 0.12, 0.05, C.white);
+      box(0.22, 0.2, 0.9, 0.05, 0.12, 0.05, C.white);
+      for (const x of [-0.5, 0.5]) for (const z of [-0.3, 0.3]) {
+        box(x, -0.9, z, 0.2, 0.35, 0.2, C.dark);
+      }
+    }
+    return { V, F };
+  }
+
+  // Draws one low-poly animal that follows the pointer and rotates in 3D
+  function initMeshFollower(kind) {
+    const model = buildLowPoly(kind);
+    const canvas = document.createElement("canvas");
+    canvas.className = "trail-canvas";
+    canvas.setAttribute("aria-hidden", "true");
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext("2d");
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let w = 0, h = 0;
+    function size() {
+      w = innerWidth;
+      h = innerHeight;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    size();
+    window.addEventListener("resize", size);
+
+    const p = { x: w / 2, y: h / 2, hx: w / 2, hy: h / 2, yaw: 0, spinAngle: 0, spinVel: 0 };
+    const S = 30;              // pixels per model unit
+    const CAM = 6;             // camera distance (bigger = flatter look)
+    const TILT_C = Math.cos(0.2), TILT_S = Math.sin(0.2);   // view slightly from above
+    const LIGHT = (() => { const v = [-0.4, 0.6, 0.7]; const l = Math.hypot(v[0], v[1], v[2]); return v.map((x) => x / l); })();
+    let raf = 0, last = 0, t = 0;
+
+    function frame(now) {
+      raf = requestAnimationFrame(frame);
+      const dt = Math.min(3, (now - last) / 16.667) || 1;
+      last = now;
+      t += dt;
+
+      // Head eases toward the pointer and turns toward the direction of movement
+      const k = Math.min(1, 0.15 * dt);
+      const dx = p.x - p.hx;
+      p.hx += (p.x - p.hx) * k;
+      p.hy += (p.y - p.hy) * k;
+      const targetYaw = Math.max(-0.7, Math.min(0.7, dx * 0.02));
+      p.yaw += (targetYaw - p.yaw) * Math.min(1, 0.1 * dt);
+
+      // Click adds a spin that slows down over time
+      p.spinAngle += p.spinVel * dt;
+      p.spinVel *= Math.pow(0.95, dt);
+
+      const yaw = p.yaw + p.spinAngle + Math.sin(t * 0.03) * 0.25;   // idle sway
+      const cyw = Math.cos(yaw), syw = Math.sin(yaw);
+      const bob = Math.sin(t * 0.05) * 4;
+
+      // Rotate vertices: turn around Y, then tilt around X
+      const T = model.V.map(([x, y, z]) => {
+        const x1 = x * cyw + z * syw;
+        const z1 = -x * syw + z * cyw;
+        return [x1, y * TILT_C - z1 * TILT_S, y * TILT_S + z1 * TILT_C];
+      });
+
+      // Project to the screen with a simple perspective
+      const P2 = T.map(([x, y, z]) => {
+        const kk = CAM / (CAM - z);
+        return [p.hx + x * S * kk, p.hy + bob - y * S * kk];
+      });
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Soft shadow under the animal
+      ctx.fillStyle = "rgba(0,0,0,0.14)";
+      ctx.beginPath();
+      ctx.ellipse(p.hx, p.hy + 42, 26, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Painter's algorithm: draw the farthest faces first
+      const order = model.F
+        .map((f) => ({ f, depth: (T[f.i[0]][2] + T[f.i[1]][2] + T[f.i[2]][2]) / 3 }))
+        .sort((a, b) => a.depth - b.depth);
+
+      ctx.lineJoin = "round";
+      for (const { f } of order) {
+        const [a, b, c] = f.i;
+        const A = T[a], B = T[b], C = T[c];
+
+        // Flat shading: face normal compared with the light direction
+        const ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2];
+        const vx = C[0] - A[0], vy = C[1] - A[1], vz = C[2] - A[2];
+        const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const nl = Math.hypot(nx, ny, nz) || 1;
+        const lam = Math.abs((nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]) / nl);
+        const shade = 0.45 + 0.55 * lam;
+
+        const [r, g, bl] = f.c;
+        ctx.fillStyle = `rgb(${Math.round(r * shade)},${Math.round(g * shade)},${Math.round(bl * shade)})`;
+        ctx.beginPath();
+        ctx.moveTo(P2[a][0], P2[a][1]);
+        ctx.lineTo(P2[b][0], P2[b][1]);
+        ctx.lineTo(P2[c][0], P2[c][1]);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,0.15)";
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      }
+    }
+
+    // Pointer: follow on move, spin on click or tap
+    const onMove = (e) => { p.x = e.clientX; p.y = e.clientY; };
+    const onDown = (e) => { p.x = e.clientX; p.y = e.clientY; p.spinVel += 0.35; };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointerdown", onDown, { passive: true });
+
+    // Pause when the tab is hidden
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) { cancelAnimationFrame(raf); }
+      else { last = performance.now(); raf = requestAnimationFrame(frame); }
     });
+
+    last = performance.now();
+    raf = requestAnimationFrame(frame);
+  }
+
+  /* 9. CURSOR FOLLOWER (desktop only): a different icon/trail each refresh */
+  const CURSOR_LAST_KEY = "cursorLastStyle";
+  const CURSOR_STYLES = [
+    { name: "Neon Orb", head: { orb: true },
+      trail: { type: "dot", rate: 2 } },
+    { name: "Rainbow Ribbon", head: { ring: true },
+      trail: { type: "ribbon" } },
+    { name: "Paw Print", head: { emoji: "🐾" },
+      trail: { type: "emoji", items: ["🐾"], rate: 0.6 } },
+    { name: "Low-Poly Animals", mesh: "random" }
+  ];
+
+  // Picks a random style that is not the same as the last visit
+  function pickCursorStyle() {
+    const n = CURSOR_STYLES.length;
+    let last = -1;
+    try { last = parseInt(localStorage.getItem(CURSOR_LAST_KEY), 10); } catch (e) { /* storage unavailable */ }
+    let i;
+    do { i = Math.floor(Math.random() * n); } while (n > 1 && i === last);
+    try { localStorage.setItem(CURSOR_LAST_KEY, String(i)); } catch (e) { /* storage unavailable */ }
+    return CURSOR_STYLES[i];
+  }
+
+  function initCursorFollower() {
+    if (!fine || reduced) return;
+
+    // Optional ?cursor=0 to ?cursor=3 forces a style (for testing)
+    const forced = parseInt(new URLSearchParams(location.search).get("cursor"), 10);
+    const style = (forced >= 0 && forced < CURSOR_STYLES.length) ? CURSOR_STYLES[forced] : pickCursorStyle();
+
+    // Low-poly 3D animal (its own renderer)
+    if (style.mesh) { initMeshFollower(style.mesh === "random" ? pick(LP_KINDS) : style.mesh); return; }
+
+    const T = style.trail;
+    const H = style.head;
+
+    // Canvas for trails and click bursts
+    const canvas = document.createElement("canvas");
+    canvas.className = "trail-canvas";
+    canvas.setAttribute("aria-hidden", "true");
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext("2d");
+
+    // Head: an emoji, a glowing orb, or a ring that follows the pointer
+    let head = null;
+    if (H.emoji || H.orb || H.ring) {
+      head = document.createElement("div");
+      head.className = "cursor-head" + (H.orb ? " orb" : H.ring ? " ring" : "");
+      head.setAttribute("aria-hidden", "true");
+      if (H.emoji) head.textContent = H.emoji;
+      document.body.appendChild(head);
+    }
+
+    // Colors follow the theme toggle
+    let pal = readPalette();
+    bgThemeListeners.add(() => { pal = readPalette(); });
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let w = 0, h = 0;
+    function size() {
+      w = innerWidth;
+      h = innerHeight;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    size();
+    window.addEventListener("resize", size);
+
+    const p = { x: innerWidth / 2, y: innerHeight / 2, hx: innerWidth / 2, hy: innerHeight / 2 };
+    const parts = [];
+    const trail = [];
+    const TRAIL_MAX = 26;
+    let raf = 0, last = 0, tick = 0;
+
+    // Creates one trail particle (or a burst particle when fast is true)
+    function makePart(x, y, fast) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = fast ? rnd(2, 6) : rnd(0, 1);
+      const part = { x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.3, life: 1, s: rnd(12, 18) };
+      if (fast && style.burst) {
+        part.kind = "emoji";
+        part.ch = pick(style.burst);
+      } else if (T.type === "emoji") {
+        part.kind = "emoji";
+        part.ch = pick(T.items);
+      } else if (T.type === "star") {
+        part.kind = "star";
+        part.s = rnd(8, 14);
+        part.c = Math.random() < 0.5 ? [255, 255, 255] : pal.a;
+      } else {
+        part.kind = "dot";
+        part.s = rnd(2, 4);
+        part.c = Math.random() < 0.5 ? pal.a : pal.b;
+      }
+      return part;
+    }
+
+    function burst(x, y) {
+      for (let i = 0; i < 14; i++) parts.push(makePart(x, y, true));
+    }
+
+    function frame(now) {
+      raf = requestAnimationFrame(frame);
+      const dt = Math.min(3, (now - last) / 16.667) || 1;
+      last = now;
+      tick++;
+
+      // Smooth easing so the head lags slightly behind the arrow
+      const k = Math.min(1, 0.22 * dt);
+      p.hx += (p.x - p.hx) * k;
+      p.hy += (p.y - p.hy) * k;
+      const sp = Math.hypot(p.x - p.hx, p.y - p.hy);
+      if (head) head.style.transform = `translate3d(${p.hx}px, ${p.hy}px, 0)`;
+
+      // Spawn trail elements while the pointer is moving
+      if (T.type === "ribbon") {
+        if (sp > 0.3) trail.push({ x: p.hx, y: p.hy });
+        else if (trail.length) trail.shift();
+        if (trail.length > TRAIL_MAX) trail.shift();
+      } else if (sp > 0.3 && Math.random() < Math.min(1, sp / 7) * (T.rate || 1)) {
+        parts.push(makePart(p.hx, p.hy, false));
+      }
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Rainbow ribbon: segments that fade and change hue
+      if (T.type === "ribbon" && trail.length > 1) {
+        const n = trail.length;
+        ctx.lineCap = "round";
+        for (let i = 1; i < n; i++) {
+          const a = i / n;
+          ctx.strokeStyle = `hsla(${(tick * 2 + i * 9) % 360}, 90%, 60%, ${(a * 0.9).toFixed(3)})`;
+          ctx.lineWidth = 1 + a * 8;
+          ctx.beginPath();
+          ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
+          ctx.lineTo(trail[i].x, trail[i].y);
+          ctx.stroke();
+        }
+      }
+
+      // Particles: emoji, dots, and stars
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const q = parts[i];
+        q.x += q.vx * dt;
+        q.y += q.vy * dt;
+        q.vx *= Math.pow(0.95, dt);
+        q.vy = q.vy * Math.pow(0.95, dt) - 0.01 * dt;
+        q.life -= 0.022 * dt;
+        if (q.life <= 0) { parts.splice(i, 1); continue; }
+
+        ctx.globalAlpha = Math.max(0, q.life);
+        if (q.kind === "emoji") {
+          ctx.font = `${q.s}px serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(q.ch, q.x, q.y);
+        } else if (q.kind === "star") {
+          ctx.fillStyle = rgba(q.c, 1);
+          ctx.font = `${q.s}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("✦", q.x, q.y);
+        } else {
+          ctx.fillStyle = rgba(q.c, 1);
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = rgba(q.c, 0.9);
+          ctx.beginPath();
+          ctx.arc(q.x, q.y, q.s, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Pointer events: follow on move, burst on click or tap
+    window.addEventListener("pointermove", (e) => { p.x = e.clientX; p.y = e.clientY; }, { passive: true });
+    window.addEventListener("pointerdown", (e) => { p.x = e.clientX; p.y = e.clientY; burst(e.clientX, e.clientY); }, { passive: true });
+
+    // Pause when the tab is hidden
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) { cancelAnimationFrame(raf); }
+      else { last = performance.now(); raf = requestAnimationFrame(frame); }
+    });
+
+    last = performance.now();
+    raf = requestAnimationFrame(frame);
   }
 
   /* 10. CONTACT FORM (front-end only) */
@@ -1047,7 +2121,7 @@ footer { border-top: 1px solid var(--border); padding: 1.5rem 0; font-size: 0.9r
 
     initBackground();
     initTilt();
-    initCursor();
+    initCursorFollower();
     initHeroParallax();
     initForm();
     initNav();
